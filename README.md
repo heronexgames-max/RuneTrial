@@ -30,3 +30,11 @@ Choose a mode with `/rune start <normal|veteran|nightmare>`. Use `/rune best <mo
 The ravager marks a four-block area with a flame ring three seconds before a slam. The hit is centered where the warning appeared. The boss slams more frequently after calling reinforcements. Revives are shared across the party and displayed on the boss bar. Players who die after the revive budget runs out leave the active party.
 
 For a demo, start Nightmare with two players. Dodge the flame ring, then show one player spending the shared revive and the other being eliminated after it runs out.
+
+## Ranked clears
+
+Use `/rune leaderboard <normal|veteran|nightmare> <1|2|3|4>` to view the ten fastest teams for a given difficulty and party size. Omitting both arguments shows Normal solo clears.
+
+The arena saves the fastest time for each roster using player UUIDs, so changing party order or player names cannot create duplicate entries. The original party must finish together for a clear to count toward the leaderboard. Checkpoint revives are allowed. A departure, disconnect, or elimination disqualifies the run from ranked scoring. Personal bests still use the existing rules.
+
+To demo ranked scoring, finish Veteran with two players and run `/rune leaderboard veteran 2`. Repeat with the same party in reversed join order and check that only the fastest time appears. Try a third run with a teammate leaving before the final wave and compare the leaderboard afterward.

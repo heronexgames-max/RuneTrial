@@ -25,6 +25,7 @@ final class Trials implements Listener {
         }
     }
 
+    private record RankedClear(String roster, String names, long durationMs) {}
     private record Slam(LivingEntity boss, Location center, long resolvesAt) {}
     private static final int TOTAL_STAGES = 4;
     private final RuneTrial plugin;
@@ -40,6 +41,7 @@ final class Trials implements Listener {
     private boolean reinforcements;
     private DifficultyMode mode = DifficultyMode.NORMAL;
     private int initialPartySize;
+    private boolean rankedEligible;
     private int revivesRemaining;
     private long nextSlamAt;
     private Slam slam;
@@ -52,15 +54,17 @@ final class Trials implements Listener {
 
     boolean command(Player player, String[] args) {
         String action = args[0].toLowerCase(Locale.ROOT);
-        if (!Set.of("setarena", "join", "leave", "start", "best").contains(action)) return false;
-        boolean modeCommand = Set.of("start", "best").contains(action);
-        if (args.length > (modeCommand ? 2 : 1)) {
-            player.sendMessage("Use /rune " + action + (modeCommand ? " [normal|veteran|nightmare]" : ""));
+        if (!Set.of("setarena", "join", "leave", "start", "best", "leaderboard").contains(action)) return false;
+        boolean ranking = action.equals("leaderboard");
+        boolean modeCommand = ranking || Set.of("start", "best").contains(action);
+        if (args.length > (ranking ? 3 : modeCommand ? 2 : 1)) {
+            player.sendMessage("Use /rune " + action + (modeCommand ? " [normal|veteran|nightmare]" : "")
+                + (ranking ? " [party-size]" : ""));
             return true;
         }
         DifficultyMode selected;
         try {
-            selected = args.length == 2 ? DifficultyMode.valueOf(args[1].toUpperCase(Locale.ROOT)) : DifficultyMode.NORMAL;
+            selected = args.length >= 2 ? DifficultyMode.valueOf(args[1].toUpperCase(Locale.ROOT)) : DifficultyMode.NORMAL;
         } catch (IllegalArgumentException invalid) {
             player.sendMessage("Choose normal, veteran or nightmare.");
             return true;
@@ -95,6 +99,7 @@ final class Trials implements Listener {
                 }
                 mode = selected;
                 initialPartySize = party.size();
+                rankedEligible = true;
                 revivesRemaining = mode.revives;
                 started = System.currentTimeMillis();
                 stage = 1;
@@ -105,6 +110,7 @@ final class Trials implements Listener {
                 remove(player);
                 player.sendMessage("Left the trial.");
             }
+            case "leaderboard" -> showLeaderboard(player, selected, args.length == 3 ? args[2] : "1");
             case "best" -> {
                 long best = plugin.getConfig().getLong(bestPath(player.getUniqueId(), selected));
                 player.sendMessage(best > 0 ? selected + " personal best: " + best / 1000.0 + "s" : "No completed " + selected + " trial.");
@@ -121,6 +127,58 @@ final class Trials implements Listener {
     private String bestPath(UUID player, DifficultyMode difficulty) {
         return difficulty == DifficultyMode.NORMAL ? "trial.best-ms." + player
             : "trial.records." + difficulty.name() + "." + player;
+    }
+
+    private String leaderboardPath(DifficultyMode difficulty, int partySize) {
+        return "trial.leaderboard." + difficulty.name() + "." + partySize;
+    }
+
+    private List<RankedClear> ranks(String path) {
+        var section = plugin.getConfig().getConfigurationSection(path);
+        if (section == null) return new ArrayList<>();
+        List<RankedClear> records = new ArrayList<>();
+        for (String roster : section.getKeys(false)) {
+            long duration = section.getLong(roster + ".ms");
+            String names = section.getString(roster + ".names");
+            if (duration > 0 && names != null) records.add(new RankedClear(roster, names, duration));
+        }
+        records.sort(Comparator.comparingLong(RankedClear::durationMs).thenComparing(RankedClear::roster));
+        return records;
+    }
+
+    private void showLeaderboard(Player player, DifficultyMode difficulty, String size) {
+        if (!Set.of("1", "2", "3", "4").contains(size)) {
+            player.sendMessage("Choose a party size from 1 to 4.");
+            return;
+        }
+        List<RankedClear> records = ranks(leaderboardPath(difficulty, Integer.parseInt(size)));
+        player.sendMessage(difficulty + " leaderboard | Party size " + size);
+        if (records.isEmpty()) player.sendMessage("No ranked clears in this bracket yet.");
+        for (int i = 0; i < records.size(); i++) {
+            RankedClear clear = records.get(i);
+            player.sendMessage("#" + (i + 1) + "  " + clear.names + "  " + clear.durationMs / 1000.0 + "s");
+        }
+    }
+
+    private void recordRankedClear(long duration) {
+        if (!rankedEligible || party.size() != initialPartySize) return;
+        List<UUID> ids = party.stream().sorted().toList();
+        List<Player> players = ids.stream().map(Bukkit::getPlayer).toList();
+        if (players.stream().anyMatch(player -> player == null
+                || !inside(player.getLocation()) || player.getGameMode() != GameMode.SURVIVAL)) return;
+        String roster = String.join("_", ids.stream().map(UUID::toString).toList());
+        String names = String.join(", ", players.stream().map(Player::getName).toList());
+        String path = leaderboardPath(mode, initialPartySize);
+        String entry = path + "." + roster;
+        var config = plugin.getConfig();
+        if (duration >= config.getLong(entry + ".ms", Long.MAX_VALUE)) return;
+        config.set(entry + ".ms", duration);
+        config.set(entry + ".names", names);
+        List<RankedClear> records = ranks(path);
+        for (int i = 10; i < records.size(); i++) config.set(path + "." + records.get(i).roster, null);
+        if (records.stream().limit(10).anyMatch(clear -> clear.roster.equals(roster))) {
+            notifyParty("Ranked clear recorded for " + mode + " / party size " + initialPartySize + ".");
+        }
     }
 
     private void spawn(EntityType type, int count) {
@@ -148,7 +206,10 @@ final class Trials implements Listener {
         if (now - started >= mode.limitMs) { stop("Time expired."); return; }
         for (UUID id : List.copyOf(party)) {
             Player player = Bukkit.getPlayer(id);
-            if (player == null) party.remove(id);
+            if (player == null) {
+                party.remove(id);
+                rankedEligible = false;
+            }
             else if (!player.isDead() && (!inside(player.getLocation()) || player.getGameMode() != GameMode.SURVIVAL)) {
                 remove(player);
                 player.sendMessage("You left the trial boundary or Survival mode.");
@@ -226,7 +287,7 @@ final class Trials implements Listener {
     }
 
     private void remove(Player player) {
-        party.remove(player.getUniqueId());
+        if (party.remove(player.getUniqueId()) && stage > 0) rankedEligible = false;
         respawns.remove(player.getUniqueId());
         bar.removePlayer(player);
         if (party.isEmpty()) stop(null);
@@ -277,6 +338,7 @@ final class Trials implements Listener {
             long best = plugin.getConfig().getLong(bestPath(id, mode), Long.MAX_VALUE);
             if (time < best) plugin.getConfig().set(bestPath(id, mode), time);
         }
+        recordRankedClear(time);
         plugin.saveConfig();
         stop("Trial cleared in " + time / 1000.0 + "s.");
     }
