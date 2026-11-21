@@ -2,13 +2,13 @@ package dev.heronex;
 
 import java.util.*;
 import org.bukkit.*;
- import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.Ageable;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
- import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
- import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.java.JavaPlugin;
 
 public final class RuneTrial extends JavaPlugin implements Listener {
     private enum Rune {
@@ -75,7 +75,7 @@ public final class RuneTrial extends JavaPlugin implements Listener {
         int kills = getConfig().getInt(progress(id));
         int available = mana.getOrDefault(id, MAX_MANA);
         if (args.length != 1) {
-            player.sendMessage("Mana " + available + "/" + MAX_MANA + " | /rune join, leave, best | Monster kills " + kills + "/12");
+            player.sendMessage("Mana " + available + "/" + MAX_MANA + " | /rune join, start [difficulty], leave, best [difficulty] | Monster kills " + kills + "/12");
             for (Rune rune : Rune.values()) {
                 player.sendMessage("/rune " + rune.name().toLowerCase(Locale.ROOT) + " | " + rune.cost
                     + " mana" + (kills < rune.unlockKills ? " | Unlocks at " + rune.unlockKills + " kills" : ""));
