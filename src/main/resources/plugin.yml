@@ -1,0 +1,13 @@
+name: RuneTrial
+version: '2.0.0'
+main: dev.heronex.RuneTrial
+api-version: '1.21.11'
+description: Unlock and cast PvE spells
+commands:
+  rune:
+    description: Unlock and cast PvE spells
+
+permissions:
+  runetrial.admin:
+    description: Configure the RuneTrial arena
+    default: op
